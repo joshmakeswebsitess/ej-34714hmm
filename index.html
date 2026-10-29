@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>EZJournal</title>
+  <link rel="icon" type="image/svg+xml" href="images/book.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <header class="top-bar">
+    <h1><button class="home-link" id="home-link" title="Go to Home">EZJournal</button></h1>
+  </header>
+
+  <div class="side-drawer" id="side-drawer">
+    <button class="drawer-btn nav-btn" data-view="home"><span class="drawer-icon">🏠</span>Home</button>
+    <button class="drawer-btn nav-btn" data-view="journal"><span class="drawer-icon">📓</span>Journal</button>
+    <button class="drawer-btn nav-btn" data-view="notes"><span class="drawer-icon">📝</span>Notes</button>
+    <button class="drawer-btn nav-btn" data-view="workouts"><span class="drawer-icon">🏋️</span>Workouts</button>
+    <button class="drawer-btn nav-btn" data-view="closet"><span class="drawer-icon">👕</span>Closet</button>
+    <button class="drawer-btn nav-btn" data-view="recipes"><span class="drawer-icon">🍳</span>Recipes</button>
+    <button class="drawer-btn" id="settings-btn"><span class="drawer-icon">⚙️</span>Settings</button>
+    <button class="drawer-toggle" id="drawer-toggle">☰</button>
+  </div>
+
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal">
+      <button class="modal-close" id="modal-close">×</button>
+      <h2>New Journal</h2>
+      <input type="text" id="journal-name" class="journal-name-input" placeholder="Name your journal...">
+      <p>Choose what you want to track:</p>
+
+      <div class="modal-options">
+        <label class="checkbox-option">
+          <input type="checkbox" id="calorie-tracker">
+          Calorie Tracker
+        </label>
+
+        <label class="checkbox-option">
+          <input type="checkbox" id="water-tracker">
+          Water Tracker
+        </label>
+
+        <label class="checkbox-option">
+          <input type="checkbox" id="weekly-tracker">
+          Weekly Progress Tracker
+        </label>
+
+        <label class="checkbox-option">
+          <input type="checkbox" id="monthly-tracker">
+          Monthly Progress Tracker
+        </label>
+      </div>
+
+      <div class="goals-section">
+        <div class="goals-header">
+          <h3>Daily Goals</h3>
+          <div class="goals-header-buttons">
+            <button class="remove-goal-btn" id="remove-goal-btn">−</button>
+            <button class="add-goal-btn" id="add-goal-btn">+</button>
+          </div>
+        </div>
+        <div class="goals-list" id="goals-list"></div>
+      </div>
+
+      <button class="create-journal-btn" id="create-journal-btn">Create Journal</button>
+
+    </div>
+  </div>
+
+  <div class="settings-overlay" id="settings-overlay">
+    <div class="modal">
+      <button class="modal-close" id="settings-close">×</button>
+      <h2>Settings</h2>
+
+      <p>Color theme:</p>
+      <div class="theme-picker" id="theme-picker">
+        <button class="theme-swatch" data-theme="sage" style="background-color: #7F9183;" title="Sage"></button>
+        <button class="theme-swatch" data-theme="blush" style="background-color: #8d4569;" title="Blush"></button>
+        <button class="theme-swatch" data-theme="crimson" style="background-color: #5f0a18;" title="Crimson"></button>
+        <button class="theme-swatch" data-theme="ember" style="background-color: #963e24;" title="Ember"></button>
+        <button class="theme-swatch" data-theme="amethyst" style="background-color: #4f2b64;" title="Amethyst"></button>
+        <button class="theme-swatch" data-theme="forest" style="background-color: #002511;" title="Forest"></button>
+        <button class="theme-swatch" data-theme="lagoon" style="background-color: #028090;" title="Lagoon"></button>
+        <button class="theme-swatch" data-theme="navy" style="background-color: #003366;" title="Navy"></button>
+        <button class="theme-swatch" data-theme="monochrome" style="background-color: #1a1818;" title="Monochrome"></button>
+      </div>
+
+      <p>Edit or delete a journal:</p>
+      <div class="delete-journal-list" id="delete-journal-list"></div>
+
+      <p class="settings-label">Edit or delete a board:</p>
+      <div class="delete-journal-list" id="delete-board-list"></div>
+
+
+      <p class="settings-label">About:</p>
+      <button class="toolbar-btn" id="open-about-btn">ℹ️ About EZJournal &amp; your data</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="closet-edit-overlay">
+    <div class="modal">
+      <button class="modal-close" id="closet-edit-close">×</button>
+      <h2>Edit item</h2>
+
+      <input type="text" id="closet-edit-name" class="journal-name-input" placeholder="Item name">
+      <select class="toolbar-select closet-edit-select" id="closet-edit-category" title="Heading"></select>
+
+      <div class="closet-edit-photo">
+        <div class="closet-edit-preview" id="closet-edit-preview"></div>
+        <div class="closet-edit-photo-buttons">
+          <label class="toolbar-btn photo-btn" for="closet-edit-photo-input">📷 Change photo</label>
+          <input type="file" id="closet-edit-photo-input" accept="image/*" hidden>
+          <button class="toolbar-btn danger-btn" id="closet-edit-remove-photo" type="button">Remove photo</button>
+        </div>
+      </div>
+
+      <button class="create-journal-btn" id="closet-edit-save">Save changes</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="recipe-form-overlay">
+    <div class="modal recipe-form-modal">
+      <button class="modal-close" id="recipe-form-close">×</button>
+      <h2 id="recipe-form-title">New recipe</h2>
+
+      <input type="text" id="recipe-name-input" class="journal-name-input" placeholder="Recipe name">
+      <select class="toolbar-select closet-edit-select" id="recipe-category-select" title="Heading"></select>
+
+      <div class="closet-edit-photo">
+        <div class="closet-edit-preview" id="recipe-photo-preview"></div>
+        <div class="closet-edit-photo-buttons">
+          <label class="toolbar-btn photo-btn" for="recipe-photo-input">📷 Add photo</label>
+          <input type="file" id="recipe-photo-input" accept="image/*" hidden>
+          <button class="toolbar-btn danger-btn" id="recipe-remove-photo" type="button">Remove photo</button>
+        </div>
+      </div>
+
+      <label class="form-label" for="recipe-text-input">Recipe</label>
+      <textarea id="recipe-text-input" class="recipe-textarea" placeholder="Ingredients, steps..."></textarea>
+
+      <label class="form-label" for="recipe-notes-input">Notes</label>
+      <textarea id="recipe-notes-input" class="recipe-textarea recipe-notes" placeholder="Tips, swaps, how it turned out..."></textarea>
+
+      <button class="create-journal-btn" id="recipe-save-btn">Add recipe</button>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="recipe-view-overlay">
+    <div class="modal recipe-view-modal">
+      <button class="modal-close" id="recipe-view-close">×</button>
+      <div id="recipe-view-body"></div>
+      <div class="recipe-view-actions">
+        <button class="toolbar-btn" id="recipe-view-edit">✎ Edit recipe</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="about-overlay">
+    <div class="modal about-modal">
+      <button class="modal-close" id="about-close">×</button>
+      <h2>About EZJournal</h2>
+
+      <div class="about-body">
+        <h3>Your entries stay on this device</h3>
+        <p>Everything you enter is saved in this browser, on this device only. It isn't sent anywhere, and nobody else can see it, including whoever shared this link with you. Your other devices, and other browsers on this device, each keep their own separate copy.</p>
+
+        <h3>Always use the same link</h3>
+        <p>Your browser ties your entries to this exact web address. If you open EZJournal from a different link, it starts out empty. Bookmark this one.</p>
+
+        <h3>Your entries can be erased</h3>
+        <p>There's no backup and no syncing. Clearing your browser's site data or history erases your entries, and private or incognito windows don't keep anything.</p>
+
+        <h3>iPhone and iPad: open it at least every few days</h3>
+        <p>Apple's browser engine, which every browser on iPhone and iPad uses (including Chrome), may erase a site's saved data after 7 days of browser use without opening that site. Opening EZJournal regularly prevents this. A Home Screen app (added with Safari's Share button) is supposed to be exempt, but it keeps its own copy of your data, separate from the browser. Use only one of the two on each device.</p>
+
+        <h3>Space is limited</h3>
+        <p>Browsers only give each site a few megabytes. Photos in your closet, recipes, and boards use it up fastest. If it fills up, EZJournal will tell you, and you'll need to remove something to add more.</p>
+
+        <h3>Not medical advice</h3>
+        <p>EZJournal is a personal tracker. The calorie, water, and workout tools are not medical, nutrition, or fitness advice. Talk to a professional about your health.</p>
+
+        <h3>Provided as-is</h3>
+        <p>This is a hobby project shared among friends, with no guarantees. Use it at your own risk.</p>
+
+        <h3>Privacy</h3>
+        <p>EZJournal doesn't collect, track, or send your entries anywhere, and it has no ads or analytics. It's hosted on GitHub Pages, which may log visitors' IP addresses for security, like most websites.</p>
+
+        <h3>Please keep the link private</h3>
+        <p>This is shared among friends. Please don't post the link publicly.</p>
+      </div>
+
+      <button class="create-journal-btn" id="about-ok">Got it</button>
+    </div>
+  </div>
+
+  <main id="app">
+    <section class="view active" id="view-home">
+      <div id="home-empty">
+        <h2>Welcome to EZJournal</h2>
+        <p>Journal, take notes, track workouts, build your digital closet, and track your favorite recipes!</p>
+      </div>
+      <div id="home-summary"></div>
+    </section>
+
+    <section class="view" id="view-journal">
+      <div class="view-header">
+        <h2>Journals</h2>
+        <button class="add-journal-btn" id="add-journal-btn">+</button>
+      </div>
+      <div class="journal-grid" id="journal-grid"></div>
+    </section>
+
+    <section class="view" id="view-journal-detail">
+      <button class="back-btn" id="back-to-journals">← Journals</button>
+      <div class="journal-view" id="journal-view"></div>
+    </section>
+
+    <section class="view" id="view-notes">
+      <div class="view-header">
+        <h2>Notes</h2>
+        <button class="add-journal-btn" id="add-board-btn">+</button>
+      </div>
+      <div class="journal-grid" id="board-grid"></div>
+    </section>
+
+    <section class="view" id="view-notes-detail">
+      <button class="back-btn" id="back-to-boards">← Boards</button>
+      <h2 id="board-title"></h2>
+
+      <div class="board-toolbar">
+        <button class="toolbar-btn" id="add-textbox-btn">+ Text box</button>
+        <button class="toolbar-btn" id="add-heading-btn">+ Heading</button>
+        <button class="toolbar-btn" id="add-sticky-btn">+ Sticky note</button>
+        <button class="toolbar-btn" id="add-checklist-btn">+ Checklist</button>
+        <button class="toolbar-btn" id="add-image-btn">+ Image</button>
+        <input type="file" id="board-image-input" accept="image/*" multiple hidden>
+        <button class="toolbar-btn" id="connect-btn">🔗 Connect</button>
+
+        <div class="bg-picker">
+          <button class="toolbar-btn" id="bg-btn" title="Change the board background">🎨 Background</button>
+          <div class="bg-popover" id="bg-popover"></div>
+        </div>
+
+        <span class="toolbar-divider"></span>
+
+        <button class="toolbar-btn format-btn" id="zoom-out-btn" title="Zoom out">−</button>
+        <button class="toolbar-btn zoom-readout" id="zoom-label" title="Reset zoom to 100%">100%</button>
+        <button class="toolbar-btn format-btn" id="zoom-in-btn" title="Zoom in">+</button>
+        <button class="toolbar-btn" id="zoom-reset-btn" title="Go back to the corner">⌂ Reset view</button>
+      </div>
+
+      <div class="line-panel" id="line-panel">
+        <span class="line-panel-title">Line</span>
+        <label class="line-control">Thickness
+          <input type="range" id="line-width" min="1" max="12" step="1" value="3">
+        </label>
+        <label class="line-control">Color
+          <input type="color" id="line-color" value="#7f9183">
+        </label>
+        <div class="line-styles">
+          <button class="toolbar-btn style-btn" data-style="solid">Solid</button>
+          <button class="toolbar-btn style-btn" data-style="dashed">Dashed</button>
+          <button class="toolbar-btn style-btn" data-style="dotted">Dotted</button>
+        </div>
+        <button class="toolbar-btn delete-line-btn" id="delete-line-btn">Delete line</button>
+      </div>
+
+      <div class="board-canvas" id="board-canvas">
+        <div class="board-world" id="board-world">
+          <svg class="board-lines" id="board-lines"></svg>
+        </div>
+
+        <div class="format-bar" id="format-bar">
+          <select class="toolbar-select" id="font-family-select" title="Font">
+            <option value="sans-serif">Default</option>
+            <option value="Arial">Arial</option>
+            <option value="Verdana">Verdana</option>
+            <option value="Trebuchet MS">Trebuchet</option>
+            <option value="Georgia">Georgia</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Courier New">Courier New</option>
+            <option value="Comic Sans MS">Comic Sans</option>
+          </select>
+          <select class="toolbar-select" id="font-size-select" title="Font size">
+            <option value="12">12</option>
+            <option value="14">14</option>
+            <option value="16" selected>16</option>
+            <option value="18">18</option>
+            <option value="24">24</option>
+            <option value="32">32</option>
+            <option value="48">48</option>
+            <option value="64">64</option>
+          </select>
+          <button class="toolbar-btn format-btn" id="bold-btn" title="Bold"><b>B</b></button>
+          <button class="toolbar-btn format-btn" id="italic-btn" title="Italic"><i>I</i></button>
+          <button class="toolbar-btn format-btn" id="apply-color-btn" title="Apply color to highlighted text"><span id="color-letter">A</span></button>
+          <input type="color" id="text-color-input" value="#333333" title="Pick text color">
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-workouts">
+      <div class="view-header">
+        <h2>Workouts</h2>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="exercises">Exercises</button>
+        <button class="tab-btn" data-tab="splits">Splits</button>
+        <button class="tab-btn" data-tab="history">History</button>
+      </div>
+
+      <div class="tab-panel active" id="workouts-exercises">
+        <div class="exercise-add">
+          <div class="exercise-add-row">
+            <input type="text" id="exercise-name-input" placeholder="Add an exercise...">
+            <button class="toolbar-btn" id="add-exercise-btn">+ Add</button>
+          </div>
+          <div class="muscle-chip-row">
+            <span class="chip-label">Groups (pick one or more):</span>  
+            <div class="muscle-chips" id="muscle-chips"></div>
+          </div>
+        </div>
+
+        <div id="exercise-catalog"></div>
+      </div>
+
+      <div class="tab-panel" id="workouts-splits">
+        <div class="splits-header">
+          <p class="splits-intro">Build your own workout splits. Name one, then pick the exercises it includes.</p>
+          <button class="toolbar-btn" id="add-split-btn">+ New split</button>
+        </div>
+        <div id="split-list"></div>
+      </div>
+
+      <div class="tab-panel" id="workouts-history">
+        <div id="history-list"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-workout-session">
+      <button class="back-btn" id="back-to-splits">← Splits</button>
+      <div id="workout-session"></div>
+    </section>
+
+    <section class="view" id="view-closet">
+      <div class="view-header">
+        <h2>Closet</h2>
+      </div>
+
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="current">Current closet</button>
+        <button class="tab-btn" data-tab="dream">Dream closet</button>
+      </div>
+
+      <div class="closet-add">
+        <input type="text" id="closet-name-input" placeholder="Name this item (e.g. Black hoodie)">
+        <select class="toolbar-select" id="closet-category-select" title="Category"></select>
+        <label class="toolbar-btn photo-btn" for="closet-photo-input">📷 Photo</label>
+        <input type="file" id="closet-photo-input" accept="image/*" hidden>
+        <div class="closet-photo-preview" id="closet-photo-preview"></div>
+        <button class="toolbar-btn" id="add-closet-item-btn">+ Add</button>
+      </div>
+
+      <div class="tab-panel active" id="closet-current"></div>
+      <div class="tab-panel" id="closet-dream"></div>
+    </section>
+
+    <section class="view" id="view-recipes">
+      <div class="view-header">
+        <h2>Recipes</h2>
+        <button class="add-journal-btn" id="add-recipe-btn" title="New recipe">+</button>
+      </div>
+      <div id="recipe-book"></div>
+    </section>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
