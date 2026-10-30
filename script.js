@@ -1,3 +1,55 @@
+// ---------- Saving and loading ----------
+
+let storageWarningShown = false;
+
+// Reads something the app saved earlier. Gives back null if the browser won't let it.
+function readItem(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch (err) {
+    return null;
+  }
+}
+
+// Reads a saved list. If it's missing or damaged, you get the fallback instead of a blank page.
+function loadList(key, fallback = []) {
+  try {
+    const value = JSON.parse(readItem(key));
+    return Array.isArray(value) ? value : fallback;
+  } catch (err) {
+    return fallback;
+  }
+}
+
+// Reads something saved as a single object, like a workout in progress.
+function loadObject(key) {
+  try {
+    const value = JSON.parse(readItem(key));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+function warnStorageFull() {
+  if (storageWarningShown) return;
+
+  storageWarningShown = true;
+  alert('Your browser storage is full, so your latest change could not be saved. Try removing a few photos or images.');
+  setTimeout(() => { storageWarningShown = false; }, 10000);
+}
+
+// Saves something. Warns (once in a while) instead of crashing when there's no room.
+function storeItem(key, value) {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (err) {
+    warnStorageFull();
+    return false;
+  }
+}
+
 const drawer = document.getElementById('side-drawer');
 const drawerToggle = document.getElementById('drawer-toggle');
 
@@ -11,21 +63,26 @@ function closeDrawer() {
   document.querySelector('.top-bar').classList.remove('shifted');
 }
 
-function getTodayKey() {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Phoenix' }).format(new Date());
-}
-
-function getPhoenixHour() {
-  return parseInt(
-    new Intl.DateTimeFormat('en-US', { timeZone: 'America/Phoenix', hour: 'numeric', hourCycle: 'h23' }).format(new Date())
-  );
-}
+// Touching anywhere outside the menu closes it
+// (a touch event is used because iPhones don't report plain taps on empty areas as clicks)
+document.addEventListener('pointerdown', (e) => {
+  if (drawer.classList.contains('open') && !e.target.closest('.side-drawer')) closeDrawer();
+});
 
 function dateToKey(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+// "Today" follows the time zone of whatever device you're using
+function getTodayKey() {
+  return dateToKey(new Date());
+}
+
+function getCurrentHour() {
+  return new Date().getHours();
 }
 
 function showView(viewName) {
@@ -87,9 +144,12 @@ addGoalBtn.addEventListener('click', () => {
   const goalRow = document.createElement('div');
   goalRow.className = 'goal-row';
 
+  // A new goal starts as a checkbox goal, so it can't get lost by forgetting to pick a type
+  goalRow.dataset.goalType = 'check';
+
   goalRow.innerHTML = `
     <input type="text" class="goal-input" placeholder="Enter your goal...">
-    <button class="goal-type-btn check-type">✓</button>
+    <button class="goal-type-btn check-type selected">✓</button>
     <button class="goal-type-btn write-type">✎</button>
   `;
 
@@ -124,10 +184,62 @@ const journalNameInput = document.getElementById('journal-name');
 const createJournalBtn = document.getElementById('create-journal-btn');
 const journalView = document.getElementById('journal-view');
 
-let journals = JSON.parse(localStorage.getItem('ezjournal-journals')) || [];
+let journals = loadList('ezjournal-journals');
 let currentViewDate = getTodayKey();
 let editingIndex = null;
 let currentJournal = null;
+
+
+// ---------- Goal IDs ----------
+// Every goal has its own permanent ID, and each day's answers are saved under that ID.
+// That way deleting, renaming, or adding a goal never moves another goal's history.
+
+let goalIdCounter = 0;
+
+function makeGoalId() {
+  goalIdCounter += 1;
+  return `g${Date.now().toString(36)}${goalIdCounter}${Math.random().toString(36).slice(2, 5)}`;
+}
+
+// Gives older journals their goal IDs and moves each day's saved answers over to them.
+// Before changing anything, the old version is kept as a backup in the browser.
+function giveGoalsIds() {
+  const needsIds = journals.some((journal) => (
+    Array.isArray(journal.goals) && journal.goals.some((goal) => !goal.id)
+  ));
+  if (!needsIds) return;
+
+  if (readItem('ezjournal-journals-backup-before-ids') === null) {
+    storeItem('ezjournal-journals-backup-before-ids', readItem('ezjournal-journals') || JSON.stringify(journals));
+  }
+
+  journals.forEach((journal) => {
+    if (!Array.isArray(journal.goals)) journal.goals = [];
+    if (!journal.entries || typeof journal.entries !== 'object') journal.entries = {};
+
+    const idAtPosition = journal.goals.map((goal) => {
+      if (!goal.id) goal.id = makeGoalId();
+      return goal.id;
+    });
+
+    Object.values(journal.entries).forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+
+      Object.keys(entry).forEach((key) => {
+        if (!/^\d+$/.test(key)) return; // calories and water keep their own names
+
+        // An answer with no goal at that position is kept, but set aside
+        const newKey = idAtPosition[Number(key)] || `old-${key}`;
+        entry[newKey] = entry[key];
+        delete entry[key];
+      });
+    });
+  });
+
+  storeItem('ezjournal-journals', JSON.stringify(journals));
+}
+
+giveGoalsIds();
 
 const themes = {
   sage:       { bg: '#DDD5D0', accent: '#7F9183', neutral: '#B8B8AA', text: '#333333' },
@@ -177,7 +289,7 @@ function applyTheme(themeName) {
   root.style.setProperty('--color-text', theme.text);
   root.style.setProperty('--color-accent-rgb', hexToRgb(theme.accent));
 
-  localStorage.setItem('ezjournal-theme', themeName);
+  storeItem('ezjournal-theme', themeName);
 }
 
 function getThemeColors() {
@@ -190,7 +302,7 @@ function getThemeColors() {
 }
 
 function saveJournals() {
-  localStorage.setItem('ezjournal-journals', JSON.stringify(journals));
+  storeItem('ezjournal-journals', JSON.stringify(journals));
   renderJournalGrid();
   renderHomeSummary();
   updateEmptyState();
@@ -232,7 +344,8 @@ createJournalBtn.addEventListener('click', () => {
     const text = row.querySelector('.goal-input').value.trim();
     const type = row.dataset.goalType;
     if (text && type) {
-      goals.push({ text, type });
+      // A goal that already existed keeps its ID, so its history stays with it
+      goals.push({ id: row.dataset.goalId || makeGoalId(), text, type });
     }
   });
 
@@ -436,32 +549,32 @@ function renderJournal(journal, direction) {
       goalsSection.appendChild(emptyMsg);
     }
 
-    journal.goals.forEach((goal, index) => {
+    // Goal names and answers are put in as plain text, so quotes and symbols can't break the page
+    journal.goals.forEach((goal) => {
       const goalItem = document.createElement('div');
       goalItem.className = 'journal-goal-item';
 
       if (goal.type === 'check') {
-        const isChecked = todayEntry[index] === true;
-        goalItem.innerHTML = `
-          <input type="checkbox" ${isChecked ? 'checked' : ''}>
-          <span>${goal.text}</span>
-        `;
-        const checkbox = goalItem.querySelector('input');
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = todayEntry[goal.id] === true;
         checkbox.addEventListener('change', () => {
-          todayEntry[index] = checkbox.checked;
+          todayEntry[goal.id] = checkbox.checked;
           saveJournals();
         });
+
+        goalItem.append(checkbox, makeEl('span', '', goal.text));
       } else {
-        const savedValue = todayEntry[index] || '';
-        goalItem.innerHTML = `
-          <span>${goal.text}:</span>
-          <input type="text" class="goal-fill-input" value="${savedValue}">
-        `;
-        const input = goalItem.querySelector('input');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'goal-fill-input';
+        input.value = typeof todayEntry[goal.id] === 'string' ? todayEntry[goal.id] : '';
         input.addEventListener('input', () => {
-          todayEntry[index] = input.value;
+          todayEntry[goal.id] = input.value;
           saveJournals();
         });
+
+        goalItem.append(makeEl('span', '', `${goal.text}:`), input);
       }
 
       goalsSection.appendChild(goalItem);
@@ -730,7 +843,7 @@ function renderCalendar(journal) {
     const isToday = dateStr === todayKey;
     const entry = journal.entries[dateStr];
     const hasRealData = entry && (
-      Object.keys(entry).some((key) => key !== 'calories' && key !== 'water' && entry[key] !== '' && entry[key] !== false) ||
+      journal.goals.some((goal) => entry[goal.id] !== undefined && entry[goal.id] !== '' && entry[goal.id] !== false) ||
       (entry.calories && (entry.calories.consumed > 0 || entry.calories.burned > 0)) ||
       (Array.isArray(entry.water) && entry.water.length > 0)
     );
@@ -853,17 +966,19 @@ function openEditModal(index) {
     const goalRow = document.createElement('div');
     goalRow.className = 'goal-row';
     goalRow.dataset.goalType = goal.type;
+    goalRow.dataset.goalId = goal.id;
 
-    goalRow.innerHTML = `
-      <input type="text" class="goal-input" value="${goal.text}">
-      <button class="goal-type-btn check-type ${goal.type === 'check' ? 'selected' : ''}">✓</button>
-      <button class="goal-type-btn write-type ${goal.type === 'write' ? 'selected' : ''}">✎</button>
-    `;
+    // The goal's name goes in as plain text, so quotes and symbols can't cut it short
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'goal-input';
+    input.value = goal.text;
 
+    const checkBtn = makeEl('button', `goal-type-btn check-type${goal.type === 'check' ? ' selected' : ''}`, '✓');
+    const writeBtn = makeEl('button', `goal-type-btn write-type${goal.type === 'write' ? ' selected' : ''}`, '✎');
+
+    goalRow.append(input, checkBtn, writeBtn);
     goalsList.appendChild(goalRow);
-
-    const checkBtn = goalRow.querySelector('.check-type');
-    const writeBtn = goalRow.querySelector('.write-type');
 
     checkBtn.addEventListener('click', () => {
       checkBtn.classList.add('selected');
@@ -904,10 +1019,14 @@ function getDayCompletion(journal, dateStr) {
   if (!entry) return 0;
 
   let completed = 0;
-  journal.goals.forEach((goal, index) => {
-    if (goal.type === 'check' && entry[index] === true) {
+  journal.goals.forEach((goal) => {
+    const value = entry[goal.id];
+
+    // A goal that was changed from a checkbox to a written answer can still hold an old true/false,
+    // so only real text counts as an answer
+    if (goal.type === 'check' && value === true) {
       completed++;
-    } else if (goal.type === 'write' && entry[index] && entry[index].trim() !== '') {
+    } else if (goal.type === 'write' && typeof value === 'string' && value.trim() !== '') {
       completed++;
     }
   });
@@ -978,7 +1097,7 @@ function renderHomeSummary() {
   });
   const overall = totalGoals ? Math.round((totalDone / totalGoals) * 100) : 0;
 
-  const hour = getPhoenixHour();
+  const hour = getCurrentHour();
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 
   summary.innerHTML = `
@@ -1310,7 +1429,7 @@ function renderMonthlyTracker(journal, box) {
 
   monthlyView = { journal, date: currentViewDate, offset: monthlyView.offset, shown: monthKey, values };
 
-  // Hover cards
+  // Hover cards (and tap cards, on touch screens)
   const tip = box.querySelector('.month-tip');
   const grid = box.querySelector('.month-grid');
 
@@ -1348,6 +1467,7 @@ function renderMonthlyTracker(journal, box) {
   grid.querySelectorAll('.month-cell[data-index]').forEach((cell) => {
     cell.addEventListener('mouseenter', () => showTip(cell));
     cell.addEventListener('mouseleave', hideTip);
+    cell.addEventListener('click', () => showTip(cell));
   });
 
   // Month arrows
@@ -1369,7 +1489,16 @@ function renderMonthlyTracker(journal, box) {
   });
 }
 
-const savedTheme = localStorage.getItem('ezjournal-theme') || 'sage';
+// Touching anywhere except a day hides the monthly hover card
+document.addEventListener('pointerdown', (e) => {
+  if (e.target.closest('.month-cell')) return;
+
+  document.querySelectorAll('.month-tip').forEach((tip) => {
+    tip.style.display = 'none';
+  });
+});
+
+const savedTheme = readItem('ezjournal-theme') || 'sage';
 applyTheme(savedTheme);
 
 document.querySelectorAll('.theme-swatch').forEach((swatch) => {
@@ -1384,24 +1513,11 @@ document.querySelectorAll('.theme-swatch').forEach((swatch) => {
 
 // ---------- Boards: saving, grid, settings ----------
 
-let boards = JSON.parse(localStorage.getItem('ezjournal-boards')) || [];
+let boards = loadList('ezjournal-boards');
 let currentBoard = null;
 
-let storageWarningShown = false;
-
 function persistBoards() {
-  try {
-    localStorage.setItem('ezjournal-boards', JSON.stringify(boards));
-    return true;
-  } catch (err) {
-    // Warn once, not on every keystroke
-    if (!storageWarningShown) {
-      storageWarningShown = true;
-      alert('Your browser storage is full, so your latest change could not be saved. Try removing a few images.');
-      setTimeout(() => { storageWarningShown = false; }, 10000);
-    }
-    return false;
-  }
+  return storeItem('ezjournal-boards', JSON.stringify(boards));
 }
 
 function saveBoards() {
@@ -1507,6 +1623,7 @@ function deleteBoard(board) {
 
   if (currentBoard === board) {
     currentBoard = null;
+    selectedItemId = null;
     activeEditor = null;
     savedRange = null;
     showView('notes');
@@ -2239,10 +2356,23 @@ function applyView() {
   positionFormatBar();
 }
 
+// Saves a moment after you stop, so typing and zooming don't re-save everything on every tick
 function schedulePersist() {
   clearTimeout(wheelTimer);
   wheelTimer = setTimeout(persistBoards, 300);
 }
+
+// Saves right away when the page is hidden or closed, so a change waiting to save is never lost
+function flushBoards() {
+  clearTimeout(wheelTimer);
+  persistBoards();
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') flushBoards();
+});
+
+window.addEventListener('pagehide', flushBoards);
 
 // Stops a glide that's in progress, like when you grab the board
 let glideFrame = null;
@@ -2397,6 +2527,81 @@ boardCanvas.addEventListener('wheel', (e) => {
   setZoom(view.zoom * Math.exp(-delta * speed));
 }, { passive: false });
 
+// ---------- Touch: pinch to zoom, two fingers to move the board ----------
+
+const touchPoints = new Map(); // the fingers touching the board right now
+let pinch = null;              // where the two fingers were last time, while a pinch is happening
+
+function readTwoFingers() {
+  const [a, b] = Array.from(touchPoints.values());
+  return { distance: Math.hypot(a.x - b.x, a.y - b.y), x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+boardCanvas.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
+
+  // The first finger of a new touch starts the count fresh, so a missed lift can't throw it off
+  if (e.isPrimary) touchPoints.clear();
+  touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  // A second (or third) finger never starts a note drag or a board move of its own
+  if (touchPoints.size >= 2) e.stopPropagation();
+  if (touchPoints.size !== 2) return;
+
+  // A second finger turns whatever the first one was doing (dragging a note, moving the board) into a pinch
+  const stop = new Event('pointerup');
+  stop.isPinchStart = true;
+  document.dispatchEvent(stop);
+
+  stopGlide();
+  pinch = readTwoFingers();
+}, true);
+
+document.addEventListener('pointermove', (e) => {
+  if (!touchPoints.has(e.pointerId)) return;
+
+  touchPoints.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (!pinch || touchPoints.size !== 2) return;
+
+  const now = readTwoFingers();
+
+  if (pinch.distance < 1) {
+    pinch = now;
+    return;
+  }
+
+  // Zooms from the middle of the board, like the scroll wheel.
+  // Two fingers sliding together move the board.
+  const zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, view.zoom * (now.distance / pinch.distance)));
+  const anchorX = boardCanvas.clientWidth / 2;
+  const anchorY = boardCanvas.clientHeight / 2;
+  const worldX = (anchorX - view.x) / view.zoom;
+  const worldY = (anchorY - view.y) / view.zoom;
+
+  view.x = anchorX - worldX * zoom + (now.x - pinch.x);
+  view.y = anchorY - worldY * zoom + (now.y - pinch.y);
+  view.zoom = zoom;
+  pinch = now;
+
+  applyView();
+  schedulePersist();
+});
+
+function releaseFinger(e) {
+  if (e.isPinchStart) return;
+
+  touchPoints.delete(e.pointerId);
+  if (touchPoints.size < 2) pinch = null;
+}
+
+document.addEventListener('pointerup', releaseFinger);
+document.addEventListener('pointercancel', releaseFinger);
+
+// Safari has its own pinch that would zoom the whole page. On the board, it stays out of the way.
+['gesturestart', 'gesturechange', 'gestureend'].forEach((name) => {
+  boardCanvas.addEventListener(name, (e) => e.preventDefault());
+});
+
 window.addEventListener('resize', () => {
   if (currentBoard) applyView();
 });
@@ -2491,7 +2696,7 @@ function buildChecklist(content, item) {
       text.addEventListener('input', () => {
         row.text = text.value;
         fit();
-        persistBoards();
+        schedulePersist();
       });
 
       text.addEventListener('keydown', (e) => {
@@ -2601,9 +2806,23 @@ function renderBoardItems() {
     } else {
       content.contentEditable = 'true';
       content.innerHTML = item.html;
+
+      // Saves a moment after you stop typing, so notes with images on the board stay quick
       content.addEventListener('input', () => {
         item.html = content.innerHTML;
-        persistBoards();
+        schedulePersist();
+      });
+
+      // Pasted text goes in plain, without the fonts and colors of wherever it came from.
+      // Pictures are handled by the page-wide paste handler.
+      content.addEventListener('paste', (e) => {
+        if (!e.clipboardData || e.clipboardData.files.length > 0) return;
+
+        const text = e.clipboardData.getData('text/plain');
+        if (!text) return;
+
+        e.preventDefault();
+        document.execCommand('insertText', false, text);
       });
     }
 
@@ -2618,8 +2837,6 @@ function renderBoardItems() {
   });
 
   popItemId = null;
-
-  // Keep the format bar working on the selected note after a redraw
 
   // Keep the format bar working on the selected note after a redraw
   const selectedItem = selectedItemId === null
@@ -3056,8 +3273,8 @@ bgPopover.append(patternLabel, patternRow, colorLabel, colorRow);
 
 bgBtn.addEventListener('click', () => bgPopover.classList.toggle('open'));
 
-// Clicking anywhere else, or pressing Escape, closes the picker
-document.addEventListener('click', (e) => {
+// Touching anywhere else, or pressing Escape, closes the picker
+document.addEventListener('pointerdown', (e) => {
   if (!e.target.closest('.bg-picker')) bgPopover.classList.remove('open');
 });
 
@@ -3266,8 +3483,8 @@ function addStarterExercises(list, names) {
 // The starter list is only added the very first time. After that,
 // the catalog is yours: whatever you add or remove stays that way.
 const EXERCISE_VERSION = 4;
-let exercises = JSON.parse(localStorage.getItem('ezjournal-exercises'));
-const savedExerciseVersion = Number(localStorage.getItem('ezjournal-exercises-version')) || 1;
+let exercises = loadList('ezjournal-exercises', null);
+const savedExerciseVersion = Number(readItem('ezjournal-exercises-version')) || 1;
 
 if (!exercises) {
   exercises = buildStarterExercises();
@@ -3277,11 +3494,11 @@ if (!exercises) {
   if (savedExerciseVersion < 4) exercises = addStarterExercises(exercises, V4_STARTERS);
 }
 
-localStorage.setItem('ezjournal-exercises', JSON.stringify(exercises));
-localStorage.setItem('ezjournal-exercises-version', String(EXERCISE_VERSION));
+storeItem('ezjournal-exercises', JSON.stringify(exercises));
+storeItem('ezjournal-exercises-version', String(EXERCISE_VERSION));
 
 function saveExercises() {
-  localStorage.setItem('ezjournal-exercises', JSON.stringify(exercises));
+  storeItem('ezjournal-exercises', JSON.stringify(exercises));
   renderExerciseCatalog();
 }
 
@@ -3477,7 +3694,7 @@ document.querySelectorAll('#view-workouts .tab-btn').forEach((btn) => {
 
 // ---------- Workouts: splits ----------
 
-let splits = JSON.parse(localStorage.getItem('ezjournal-splits')) || [];
+let splits = loadList('ezjournal-splits');
 let openPickerId = null;
 
 function makeEl(tag, className, text) {
@@ -3488,7 +3705,7 @@ function makeEl(tag, className, text) {
 }
 
 function persistSplits() {
-  localStorage.setItem('ezjournal-splits', JSON.stringify(splits));
+  storeItem('ezjournal-splits', JSON.stringify(splits));
 }
 
 function saveSplits() {
@@ -3673,20 +3890,24 @@ function renderSplits() {
 
 // ---------- Workouts: logging ----------
 
-let workoutLogs = JSON.parse(localStorage.getItem('ezjournal-workout-logs')) || [];
+let workoutLogs = loadList('ezjournal-workout-logs');
 
 // The workout you're in the middle of: { splitId, date, sets: { exerciseId: [{ weight, reps or seconds }] } }
-let activeWorkout = JSON.parse(localStorage.getItem('ezjournal-active-workout')) || null;
+let activeWorkout = loadObject('ezjournal-active-workout');
 
 function saveWorkoutLogs() {
-  localStorage.setItem('ezjournal-workout-logs', JSON.stringify(workoutLogs));
+  storeItem('ezjournal-workout-logs', JSON.stringify(workoutLogs));
 }
 
 function persistWorkout() {
   if (activeWorkout) {
-    localStorage.setItem('ezjournal-active-workout', JSON.stringify(activeWorkout));
+    storeItem('ezjournal-active-workout', JSON.stringify(activeWorkout));
   } else {
-    localStorage.removeItem('ezjournal-active-workout');
+    try {
+      localStorage.removeItem('ezjournal-active-workout');
+    } catch (err) {
+      // nothing to remove if the browser won't let us look
+    }
   }
 }
 
@@ -4046,7 +4267,7 @@ const CLOSET_ICONS = {
 };
 
 // Each item: { id, closet: 'current' | 'dream', category, name, photo }
-let closetItems = JSON.parse(localStorage.getItem('ezjournal-closet')) || [];
+let closetItems = loadList('ezjournal-closet');
 let activeClosetTab = 'current';
 let pendingPhoto = ''; // a photo you've picked but haven't added yet
 
@@ -4497,7 +4718,7 @@ const RECIPE_ICONS = {
 };
 
 // Each recipe: { id, category, name, photo, recipe, notes }
-let recipes = JSON.parse(localStorage.getItem('ezjournal-recipes')) || [];
+let recipes = loadList('ezjournal-recipes');
 let recipeFormTarget = null; // the recipe being edited, or null for a new one
 let recipeFormPhoto = '';
 
@@ -4912,8 +5133,13 @@ function fillWaterUnitSelect(select, selectedKey) {
 function drawWaterBottle(canvas, fraction, phase = 0, slosh = 0) {
   const ctx = canvas.getContext('2d');
   const colors = getThemeColors();
-  const W = canvas.width;
-  const H = canvas.height;
+
+  // The bottle is drawn on an 80 by 150 grid. On phones and tablets the canvas has more
+  // pixels than that, so the same drawing is scaled up and stays sharp.
+  const W = 80;
+  const H = 150;
+  const scale = canvas.width / W;
+  ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
   const BOTTOM = 146; // the floor of the bottle
   const TOP = 22;     // a full bottle fills up into the neck
@@ -5095,6 +5321,14 @@ function renderWaterTracker(journal, box) {
     </div>
   `;
 
+  // Sharper bottle on phones and tablets: more pixels, shown at the same size
+  const bottleCanvas = box.querySelector('#water-bottle');
+  const pixelRatio = Math.min(window.devicePixelRatio || 1, 3);
+  bottleCanvas.width = Math.round(80 * pixelRatio);
+  bottleCanvas.height = Math.round(150 * pixelRatio);
+  bottleCanvas.style.width = '80px';
+  bottleCanvas.style.height = '150px';
+
   function logWater(amountInUnit) {
     entry.water.push(amountInUnit * unit.ml);
     saveJournals();
@@ -5155,9 +5389,100 @@ function renderWaterTracker(journal, box) {
   const level = Math.min(fraction, 1);
   const sameView = lastWaterView.journal === journal && lastWaterView.date === currentViewDate;
 
-  animateWaterBottle(box.querySelector('#water-bottle'), sameView ? lastWaterView.fraction : 0, level);
+  animateWaterBottle(bottleCanvas, sameView ? lastWaterView.fraction : 0, level);
   lastWaterView = { journal, date: currentViewDate, fraction: level };
 }
+
+// ---------- Moving cards earlier or later ----------
+// Tap buttons for putting closet items and recipes in order, for screens where dragging is awkward.
+
+// Swaps a card with its neighbor under the same heading. Gives back false if there's nowhere to go.
+function nudge(list, item, inSameGroup, step) {
+  const group = list.filter(inSameGroup);
+  const position = group.indexOf(item);
+  const neighbor = position < 0 ? null : group[position + step];
+  if (!neighbor) return false;
+
+  const a = list.indexOf(item);
+  const b = list.indexOf(neighbor);
+  [list[a], list[b]] = [list[b], list[a]];
+  return true;
+}
+
+// Closet items
+const closetGroupOf = (item) => (it) => it.closet === item.closet && it.category === item.category;
+
+function refreshClosetMove() {
+  const item = editingClosetItem;
+  if (!item) return;
+
+  const group = closetItems.filter(closetGroupOf(item));
+  const position = group.indexOf(item);
+  const headingChanged = closetEditCategory.value !== item.category;
+
+  document.getElementById('closet-move-label').textContent = headingChanged
+    ? 'Save first to move it to the new heading, then you can reorder it'
+    : `Order: ${position + 1} of ${group.length}`;
+  document.getElementById('closet-move-earlier').disabled = headingChanged || position <= 0;
+  document.getElementById('closet-move-later').disabled = headingChanged || position >= group.length - 1;
+}
+
+function moveClosetCard(step) {
+  const item = editingClosetItem;
+  if (!item) return;
+
+  const backup = closetItems.slice();
+  if (!nudge(closetItems, item, closetGroupOf(item), step)) return;
+
+  if (!saveCloset()) closetItems = backup; // it didn't fit, so keep the old order
+  refreshClosetMove();
+}
+
+document.getElementById('closet-move-earlier').addEventListener('click', () => moveClosetCard(-1));
+document.getElementById('closet-move-later').addEventListener('click', () => moveClosetCard(1));
+closetEditCategory.addEventListener('change', refreshClosetMove);
+
+// Keeps the buttons right whenever the edit window opens
+new MutationObserver(refreshClosetMove).observe(closetEditOverlay, { attributes: true, attributeFilter: ['class'] });
+
+// Recipes
+const recipeGroupOf = (recipe) => (r) => r.category === recipe.category;
+
+function refreshRecipeMove() {
+  const recipe = recipeFormTarget;
+  const row = document.getElementById('recipe-move-row');
+
+  // A recipe that hasn't been added yet has no place to move
+  row.hidden = !recipe;
+  if (!recipe) return;
+
+  const group = recipes.filter(recipeGroupOf(recipe));
+  const position = group.indexOf(recipe);
+  const headingChanged = recipeCategorySelect.value !== recipe.category;
+
+  document.getElementById('recipe-move-label').textContent = headingChanged
+    ? 'Save first to move it to the new heading, then you can reorder it'
+    : `Order: ${position + 1} of ${group.length}`;
+  document.getElementById('recipe-move-earlier').disabled = headingChanged || position <= 0;
+  document.getElementById('recipe-move-later').disabled = headingChanged || position >= group.length - 1;
+}
+
+function moveRecipeCard(step) {
+  const recipe = recipeFormTarget;
+  if (!recipe) return;
+
+  const backup = recipes.slice();
+  if (!nudge(recipes, recipe, recipeGroupOf(recipe), step)) return;
+
+  if (!saveRecipes()) recipes = backup; // it didn't fit, so keep the old order
+  refreshRecipeMove();
+}
+
+document.getElementById('recipe-move-earlier').addEventListener('click', () => moveRecipeCard(-1));
+document.getElementById('recipe-move-later').addEventListener('click', () => moveRecipeCard(1));
+recipeCategorySelect.addEventListener('change', refreshRecipeMove);
+
+new MutationObserver(refreshRecipeMove).observe(recipeFormOverlay, { attributes: true, attributeFilter: ['class'] });
 
 // ---------- About popup ----------
 
@@ -5170,7 +5495,7 @@ function openAbout() {
 
 function closeAbout() {
   aboutOverlay.classList.remove('open');
-  localStorage.setItem('ezjournal-about-seen', '1');
+  storeItem('ezjournal-about-seen', '1');
 }
 
 document.getElementById('open-about-btn').addEventListener('click', () => {
@@ -5190,7 +5515,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 // It shows once, the first time someone opens the app on a device
-if (!localStorage.getItem('ezjournal-about-seen')) openAbout();
+if (!readItem('ezjournal-about-seen')) openAbout();
 
 // ---------- Start up ----------
 
